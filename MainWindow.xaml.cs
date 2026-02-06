@@ -1,6 +1,7 @@
 ﻿using System.Text;
 using System.Text.Json;
 using System.IO;
+using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -11,6 +12,7 @@ using System.Collections.ObjectModel;
 using System.Runtime.InteropServices;
 using System.Windows.Threading;
 using System.Windows.Interop;
+using Microsoft.Win32;
 using Microsoft.VisualBasic;
 using LibreHardwareMonitor.Hardware;
 
@@ -22,6 +24,8 @@ namespace BoMonitor;
 public partial class MainWindow : Window
 {
     private static readonly string BaseDirectory = AppContext.BaseDirectory;
+    private const string AutoLaunchRegistryPath = @"Software\Microsoft\Windows\CurrentVersion\Run";
+    private const string AutoLaunchValueName = "BoMonitor";
     private bool _isExitRequested;
     private Computer? _computer;
     private DispatcherTimer? _monitorTimer;
@@ -255,6 +259,7 @@ public partial class MainWindow : Window
         BuildMonitoringMenuItems();
         BuildItemsMenu();
         UpdateMonitorIntervalMenu();
+        UpdateAutoLaunchMenuItem();
         UpdateTopMenuItem();
         UpdateMousePassthroughMenu();
     }
@@ -309,6 +314,13 @@ public partial class MainWindow : Window
     {
         Topmost = TopMenuItem?.IsChecked == true;
         UpdateTopMenuItem();
+    }
+
+    private void TrayAutoLaunch_Click(object sender, RoutedEventArgs e)
+    {
+        var enable = AutoLaunchMenuItem?.IsChecked == true;
+        SetAutoLaunchEnabled(enable);
+        UpdateAutoLaunchMenuItem();
     }
 
     private void TrayMousePassthrough_Click(object sender, RoutedEventArgs e)
@@ -552,6 +564,114 @@ public partial class MainWindow : Window
         }
 
         MousePassthroughMenuItem.IsChecked = _isMousePassthroughEnabled;
+    }
+
+    private void UpdateAutoLaunchMenuItem()
+    {
+        if (AutoLaunchMenuItem is null)
+        {
+            return;
+        }
+
+        AutoLaunchMenuItem.IsChecked = IsAutoLaunchEnabled();
+    }
+
+    private static bool IsAutoLaunchEnabled()
+    {
+        var currentPath = GetAutoLaunchExecutablePath();
+        if (string.IsNullOrWhiteSpace(currentPath))
+        {
+            return false;
+        }
+
+        try
+        {
+            using var key = Registry.CurrentUser.OpenSubKey(AutoLaunchRegistryPath, false);
+            var value = key?.GetValue(AutoLaunchValueName) as string;
+            if (string.IsNullOrWhiteSpace(value))
+            {
+                return false;
+            }
+
+            var trimmed = value.Trim();
+            if (trimmed.StartsWith("\"", StringComparison.Ordinal))
+            {
+                var endQuote = trimmed.IndexOf('"', 1);
+                if (endQuote > 1)
+                {
+                    var path = trimmed.Substring(1, endQuote - 1);
+                    return PathEquals(path, currentPath);
+                }
+            }
+
+            var firstToken = trimmed.Split(' ', StringSplitOptions.RemoveEmptyEntries).FirstOrDefault();
+            if (string.IsNullOrWhiteSpace(firstToken))
+            {
+                return false;
+            }
+
+            return PathEquals(firstToken, currentPath);
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private static void SetAutoLaunchEnabled(bool enabled)
+    {
+        try
+        {
+            using var key = Registry.CurrentUser.OpenSubKey(AutoLaunchRegistryPath, true)
+                ?? Registry.CurrentUser.CreateSubKey(AutoLaunchRegistryPath);
+            if (key is null)
+            {
+                return;
+            }
+
+            if (enabled)
+            {
+                var path = GetAutoLaunchExecutablePath();
+                if (string.IsNullOrWhiteSpace(path))
+                {
+                    return;
+                }
+
+                key.SetValue(AutoLaunchValueName, $"\"{path}\"");
+            }
+            else
+            {
+                key.DeleteValue(AutoLaunchValueName, false);
+            }
+        }
+        catch
+        {
+        }
+    }
+
+    private static string? GetAutoLaunchExecutablePath()
+    {
+        var path = Environment.ProcessPath;
+        if (string.IsNullOrWhiteSpace(path))
+        {
+            path = Process.GetCurrentProcess().MainModule?.FileName;
+        }
+
+        return path;
+    }
+
+    private static bool PathEquals(string left, string right)
+    {
+        try
+        {
+            var leftPath = Path.GetFullPath(left);
+            var rightPath = Path.GetFullPath(right);
+            return string.Equals(leftPath, rightPath, StringComparison.OrdinalIgnoreCase);
+        }
+        catch
+        {
+            return string.Equals(left, right, StringComparison.OrdinalIgnoreCase);
+        }
     }
 
     private void ApplyMousePassthrough(bool enabled)

@@ -52,14 +52,19 @@
                                       Click="TrayUpdateInterval_Click"/>
                         </MenuItem>
                         <Separator/>
+                        <MenuItem x:Name="AutoLaunchMenuItem"
+                                  Header="Auto Launch"
+                                  IsCheckable="True"
+                                  Click="TrayAutoLaunch_Click"/>
                         <MenuItem x:Name="TopMenuItem"
-                                  Header="Top"
+                                  Header="Pin Top"
                                   IsCheckable="True"
                                   Click="TrayTop_Click"/>
                         <MenuItem x:Name="MousePassthroughMenuItem"
-                                  Header="鼠标穿透"
+                                  Header="Pass Through"
                                   IsCheckable="True"
                                   Click="TrayMousePassthrough_Click"/>
+                        <Separator/>
                         <MenuItem Header="Hide"
                                   Click="TrayHide_Click"/>
                         <MenuItem Header="Exit"

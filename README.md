@@ -4,3 +4,6 @@
 
 **Completely written by AI**  
 AI太好用了你知道吗！
+
+## Custom
+`config\style.json` 中修改主题样式
