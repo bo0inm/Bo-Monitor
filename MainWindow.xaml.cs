@@ -50,6 +50,21 @@ public partial class MainWindow : Window
         Closing += MainWindow_Closing;
         Closed += MainWindow_Closed;
         Loaded += MainWindow_Loaded;
+        SourceInitialized += MainWindow_SourceInitialized;
+    }
+
+    private void MainWindow_SourceInitialized(object? sender, EventArgs e)
+    {
+        var handle = new WindowInteropHelper(this).Handle;
+        if (handle == IntPtr.Zero)
+        {
+            return;
+        }
+
+        var exStyle = GetWindowLongPtr(handle, GWL_EXSTYLE).ToInt64();
+        exStyle |= WS_EX_TOOLWINDOW;
+        exStyle &= ~WS_EX_APPWINDOW;
+        SetWindowLongPtr(handle, GWL_EXSTYLE, new IntPtr(exStyle));
     }
 
     private void MainWindow_Loaded(object sender, RoutedEventArgs e)
@@ -806,6 +821,8 @@ public partial class MainWindow : Window
     private const int GWL_EXSTYLE = -20;
     private const long WS_EX_TRANSPARENT = 0x20L;
     private const long WS_EX_LAYERED = 0x80000L;
+    private const long WS_EX_TOOLWINDOW = 0x80L;
+    private const long WS_EX_APPWINDOW = 0x40000L;
 
     [DllImport("user32.dll", SetLastError = true)]
     private static extern bool GetCursorPos(out POINT lpPoint);
