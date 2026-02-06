@@ -6,6 +6,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
+using System.Windows.Media.Animation;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.Collections.ObjectModel;
@@ -29,6 +30,8 @@ public partial class MainWindow : Window
     private bool _isExitRequested;
     private Computer? _computer;
     private DispatcherTimer? _monitorTimer;
+    private DispatcherTimer? _passthroughHoverTimer;
+    private bool _isHoverTransparent;
     private string? _styleConfigPath;
     private string? _monitorConfigPath;
     private MonitorConfig? _monitorConfig;
@@ -188,6 +191,8 @@ public partial class MainWindow : Window
         TrayIcon.Dispose();
         _monitorTimer?.Stop();
         _monitorTimer = null;
+        _passthroughHoverTimer?.Stop();
+        _passthroughHoverTimer = null;
         _computer?.Close();
         _computer = null;
     }
@@ -326,6 +331,9 @@ public partial class MainWindow : Window
     private void TrayMousePassthrough_Click(object sender, RoutedEventArgs e)
     {
         _isMousePassthroughEnabled = MousePassthroughMenuItem?.IsChecked == true;
+        _monitorConfig ??= new MonitorConfig();
+        _monitorConfig.MousePassthroughEnabled = _isMousePassthroughEnabled;
+        SaveMonitorConfig();
         ApplyMousePassthrough(_isMousePassthroughEnabled);
         UpdateMousePassthroughMenu();
     }
@@ -695,11 +703,131 @@ public partial class MainWindow : Window
 
         SetWindowLongPtr(handle, GWL_EXSTYLE, new IntPtr(exStyle));
         RootBorder.IsHitTestVisible = !enabled;
+        UpdatePassthroughHoverTracking(enabled);
+    }
+
+    private void UpdatePassthroughHoverTracking(bool enabled)
+    {
+        if (!enabled)
+        {
+            StopPassthroughHoverTimer();
+            SetHoverTransparency(false);
+            return;
+        }
+
+        if (_passthroughHoverTimer is null)
+        {
+            _passthroughHoverTimer = new DispatcherTimer
+            {
+                Interval = TimeSpan.FromMilliseconds(100)
+            };
+            _passthroughHoverTimer.Tick += PassthroughHoverTimer_Tick;
+        }
+
+        _passthroughHoverTimer.Start();
+        UpdateHoverTransparencyFromCursor();
+    }
+
+    private void StopPassthroughHoverTimer()
+    {
+        if (_passthroughHoverTimer is null)
+        {
+            return;
+        }
+
+        _passthroughHoverTimer.Stop();
+    }
+
+    private void PassthroughHoverTimer_Tick(object? sender, EventArgs e)
+    {
+        UpdateHoverTransparencyFromCursor();
+    }
+
+    private void UpdateHoverTransparencyFromCursor()
+    {
+        if (!_isMousePassthroughEnabled || !IsVisible)
+        {
+            SetHoverTransparency(false);
+            return;
+        }
+
+        if (!TryIsCursorOverWindow(out var isOver))
+        {
+            SetHoverTransparency(false);
+            return;
+        }
+
+        SetHoverTransparency(isOver);
+    }
+
+    private void SetHoverTransparency(bool isOver)
+    {
+        if (RootBorder is null || _isHoverTransparent == isOver)
+        {
+            return;
+        }
+
+        _isHoverTransparent = isOver;
+        var targetOpacity = isOver ? 0.0 : 1.0;
+        var animation = new DoubleAnimation
+        {
+            To = targetOpacity,
+            Duration = TimeSpan.FromMilliseconds(100),
+            FillBehavior = FillBehavior.HoldEnd
+        };
+
+        RootBorder.BeginAnimation(UIElement.OpacityProperty, animation);
+    }
+
+    private bool TryIsCursorOverWindow(out bool isOver)
+    {
+        isOver = false;
+        var handle = new WindowInteropHelper(this).Handle;
+        if (handle == IntPtr.Zero)
+        {
+            return false;
+        }
+
+        if (!GetCursorPos(out var point))
+        {
+            return false;
+        }
+
+        if (!GetWindowRect(handle, out var rect))
+        {
+            return false;
+        }
+
+        isOver = point.X >= rect.Left && point.X <= rect.Right
+            && point.Y >= rect.Top && point.Y <= rect.Bottom;
+        return true;
     }
 
     private const int GWL_EXSTYLE = -20;
     private const long WS_EX_TRANSPARENT = 0x20L;
     private const long WS_EX_LAYERED = 0x80000L;
+
+    [DllImport("user32.dll", SetLastError = true)]
+    private static extern bool GetCursorPos(out POINT lpPoint);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    private static extern bool GetWindowRect(IntPtr hWnd, out RECT lpRect);
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct POINT
+    {
+        public int X;
+        public int Y;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct RECT
+    {
+        public int Left;
+        public int Top;
+        public int Right;
+        public int Bottom;
+    }
 
     [DllImport("user32.dll", SetLastError = true)]
     private static extern IntPtr GetWindowLongPtr(IntPtr hWnd, int nIndex);
@@ -977,6 +1105,9 @@ public partial class MainWindow : Window
         {
             _monitorUpdateIntervalSeconds = _monitorConfig.UpdateIntervalSeconds;
         }
+
+        _isMousePassthroughEnabled = _monitorConfig.MousePassthroughEnabled;
+        ApplyMousePassthrough(_isMousePassthroughEnabled);
     }
 
     private void SaveMonitorConfig()
@@ -1191,6 +1322,7 @@ public partial class MainWindow : Window
         public Dictionary<string, bool>? Display { get; set; }
         public List<RenameItem>? Rename { get; set; }
         public int UpdateIntervalSeconds { get; set; } = 2;
+        public bool MousePassthroughEnabled { get; set; }
     }
 
     private sealed class MonitoringConfig

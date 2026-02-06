@@ -6,4 +6,6 @@
 AI太好用了你知道吗！
 
 ## Custom
-`config\style.json` 中修改主题样式
+
+- `config\style.json` 中修改主题样式
+- 重命名：双击显示项
