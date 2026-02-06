@@ -1054,7 +1054,7 @@ public partial class MainWindow : Window
     {
         return sensorType switch
         {
-            SensorType.Temperature => " C",
+            SensorType.Temperature => " °C",
             SensorType.Load => " %",
             SensorType.Level => " %",
             SensorType.Power => " W",
