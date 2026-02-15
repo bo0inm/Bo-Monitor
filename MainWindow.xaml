@@ -96,8 +96,6 @@
                     </ItemsControl.ItemTemplate>
                 </ItemsControl>
             </ScrollViewer>
-
-
         </Grid>
     </Border>
 </Window>
